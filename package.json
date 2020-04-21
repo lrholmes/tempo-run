@@ -8,10 +8,13 @@
     "eject": "expo eject"
   },
   "dependencies": {
+    "@types/ramda": "^0.27.3",
+    "@types/spotify-api": "^0.0.3",
     "@types/spotify-web-api-node": "^4.0.1",
     "expo": "~37.0.3",
     "expo-auth-session": "^1.0.1",
-    "expo-web-browser": "8.1.1",
+    "expo-web-browser": "^8.2.0",
+    "ramda": "^0.27.0",
     "react": "~16.9.0",
     "react-dom": "~16.9.0",
     "react-native": "https://github.com/expo/react-native/archive/sdk-37.0.1.tar.gz",
