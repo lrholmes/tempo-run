@@ -73,7 +73,6 @@ const useSpotifyAuthentication = () => {
 
   useEffect(() => {
     getAuthState().then((authState) => {
-      console.log({ authState });
       if (authState) {
         const timeNow = new Date().getTime();
         if (authState.expiresIn > timeNow) {
