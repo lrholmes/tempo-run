@@ -1,4 +1,4 @@
-import React, { useState, createContext, useContext, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Platform,
   StyleSheet,
@@ -9,6 +9,7 @@ import {
   ScrollView,
   Linking,
   SafeAreaView,
+  AsyncStorage,
 } from 'react-native';
 import Constants from 'expo-constants';
 import * as AuthSession from 'expo-auth-session';
@@ -17,6 +18,8 @@ import * as Font from 'expo-font';
 import { AuthSessionResult } from 'expo-auth-session/build/AuthSession.types';
 import SpotifyWebApi from 'spotify-web-api-node';
 import * as R from 'ramda';
+
+import posed, { Transition } from './pose';
 
 if (Platform.OS === 'web') {
   Constants.manifest.id = `@lawrenceholmes/${Constants.manifest.slug}`;
@@ -50,16 +53,45 @@ export const login = async () => {
   return result;
 };
 
+const persistAuthState = ({ token, expiresIn }) =>
+  AsyncStorage.setItem('authState', JSON.stringify({ token, expiresIn }));
+
+const getAuthState = async () => {
+  const jsonString = await AsyncStorage.getItem('authState');
+  try {
+    return jsonString ? JSON.parse(jsonString) : null;
+  } catch {
+    return null;
+  }
+};
+
 const useSpotifyAuthentication = () => {
   const [token, setToken] = useState('');
   const [authState, setAuthState] = useState<
     AuthSessionResult['type'] | undefined
   >(undefined);
 
+  useEffect(() => {
+    getAuthState().then((authState) => {
+      console.log({ authState });
+      if (authState) {
+        const timeNow = new Date().getTime();
+        if (authState.expiresIn > timeNow) {
+          setToken(authState.token);
+        }
+      }
+    });
+  }, []);
+
   const handleLogin = () =>
     login().then((result) => {
       if (result.type === 'success') {
-        setToken(result.params.access_token);
+        const { access_token: token, expires_in: expiresIn } = result.params;
+        setToken(token);
+        persistAuthState({
+          token,
+          expiresIn: new Date().getTime() + expiresIn,
+        });
       }
       setAuthState(result.type);
       return result;
@@ -251,17 +283,19 @@ const ListTracks = ({ seeds, playlistType, minTempo }) => {
       </ScrollView>
       <View
         style={{
-          position: 'absolute',
+          position: Platform.OS === 'web' ? 'fixed' : 'absolute',
+          maxWidth: 700,
           bottom: 0,
           left: 0,
           right: 0,
           padding: 24,
+          marginHorizontal: 'auto',
         }}
       >
         {playlist ? (
           <Button
             title="Listen to playlist"
-            onPress={() => Linking.openURL(playlist.href)}
+            onPress={() => Linking.openURL(playlist.external_urls.spotify)}
           >
             Listen to playlist
           </Button>
@@ -310,7 +344,7 @@ const buttonStyles = StyleSheet.create({
   },
 });
 
-const InitialScreen = ({ onButtonClick }) => (
+const InitialScreen = ({ isLoggedIn, onButtonClick }) => (
   <View style={styles.content}>
     <Text style={{ fontSize: 18, marginBottom: 100, fontWeight: '500' }}>
       Create personalised playlists tailored to your pace and taste
@@ -318,9 +352,11 @@ const InitialScreen = ({ onButtonClick }) => (
     <Button style={{ marginTop: 'auto' }} title="login" onPress={onButtonClick}>
       Let's Go >>>
     </Button>
-    <Text style={{ fontSize: 12, marginTop: 4 }}>
-      You will be prompted to login with Spotify
-    </Text>
+    {!isLoggedIn && (
+      <Text style={{ fontSize: 12, marginTop: 4 }}>
+        You will be prompted to login with Spotify
+      </Text>
+    )}
   </View>
 );
 
@@ -360,6 +396,7 @@ const PaceScreen = ({ handleChooseTempo }) => (
     >
       {PACE_OPTIONS.map(({ kmMinsUpper, kmMinsLower, bpmLower }, index) => (
         <View
+          key={index}
           style={{
             flexBasis: '50%',
             flexGrow: 1,
@@ -456,7 +493,7 @@ const PlaylistTypeScreen = ({ handleChoosePlaylistType }) => (
   </View>
 );
 
-const Seed = ({ isSelected, children, onPress }) => (
+const Seed = ({ disabled, isSelected, children, onPress }) => (
   <TouchableOpacity
     onPress={onPress}
     style={{
@@ -467,6 +504,7 @@ const Seed = ({ isSelected, children, onPress }) => (
       borderWidth: 1,
       borderColor: '#000',
       backgroundColor: isSelected ? '#000' : '#fff',
+      opacity: disabled ? 0.5 : 1,
     }}
   >
     <Text style={{ color: isSelected ? '#fff' : '#000' }}>{children}</Text>
@@ -487,24 +525,27 @@ const DiscoverOptionsScreen = ({
     });
   }, []);
 
+  const maxSelected = seeds.length > 4;
+
   return (
     <View style={styles.content}>
       <Text style={typographyStyles.heading}>Discover</Text>
       <Text style={{ marginTop: 8 }}>
         What do you like to run to? Choose up to 5 artists or genres.
       </Text>
-      <Text style={{ fontSize: 24, fontWeight: '500', marginTop: 16 }}>
-        Artist
-      </Text>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap' }}>
+      <View style={{ marginTop: 16, flexDirection: 'row', flexWrap: 'wrap' }}>
         {artists.map((artist) => {
           const isSelected = seeds.find(({ name }) => name === artist.name);
           return (
             <Seed
+              key={artist.id}
               isSelected={isSelected}
+              disabled={!isSelected && maxSelected}
               onPress={() =>
                 isSelected
                   ? removeSeed(artist.id)
+                  : maxSelected
+                  ? null
                   : addSeed({
                       id: artist.id,
                       name: artist.name,
@@ -533,6 +574,31 @@ interface Seed {
   value: string;
   type: 'ARTIST' | 'GENRE';
 }
+
+const AnimateComponent = Platform.OS === 'web' ? 'div' : View;
+
+const Progress = posed(AnimateComponent)({
+  progress: {
+    width: ({ progress }) => `${progress}`,
+  },
+});
+
+const ScreenTransition = posed(AnimateComponent)({
+  initial: {
+    x: 600,
+    opacity: 1,
+  },
+  enter: {
+    x: 0,
+    opacity: 1,
+    transition: { duration: 300 },
+  },
+  exit: {
+    x: -600,
+    opacity: 0,
+    transition: { duration: 300 },
+  },
+});
 
 export default function App() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
@@ -583,6 +649,7 @@ export default function App() {
       include: true,
       component: (
         <InitialScreen
+          isLoggedIn={Boolean(token)}
           onButtonClick={
             token ? goToNextScreen : () => handleLogin().then(goToNextScreen)
           }
@@ -643,19 +710,35 @@ export default function App() {
         <TitleSection />
       </View>
       <View style={styles.underlineContainer}>
-        <View
-          style={[
-            styles.underline,
-            {
-              width:
-                currentScreen.name !== 'initial'
-                  ? `${progressPercentage}%`
-                  : '100%',
-            },
-          ]}
+        <Progress
+          pose="progress"
+          poseKey={progressPercentage}
+          progress={
+            currentScreen.name !== 'initial' ? `${progressPercentage}%` : '100%'
+          }
+          style={{
+            height: 8,
+            backgroundColor: '#000',
+          }}
         />
       </View>
-      {currentScreen.component}
+      <View style={{ flex: 1, position: 'relative' }}>
+        <Transition preEnterPose="initial" exitPose="exit">
+          <ScreenTransition
+            style={{
+              flex: 1,
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            }}
+            key={screenIndex}
+          >
+            {currentScreen.component}
+          </ScreenTransition>
+        </Transition>
+      </View>
     </SafeAreaView>
   );
 }
@@ -687,10 +770,6 @@ const styles = StyleSheet.create({
   },
   underlineContainer: {
     paddingHorizontal: 24,
-  },
-  underline: {
-    height: 8,
-    backgroundColor: '#000',
   },
   content: {
     padding: 24,

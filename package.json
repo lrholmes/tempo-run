@@ -18,8 +18,10 @@
     "react": "~16.9.0",
     "react-dom": "~16.9.0",
     "react-native": "https://github.com/expo/react-native/archive/sdk-37.0.1.tar.gz",
+    "react-native-pose": "^0.9.1",
     "react-native-screens": "~2.2.0",
     "react-native-web": "~0.11.7",
+    "react-pose": "^4.0.10",
     "spotify-web-api-node": "^4.0.0"
   },
   "devDependencies": {
