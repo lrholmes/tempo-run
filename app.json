@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "running-playlist",
-    "slug": "running-playlist",
-    "scheme": "running-playlist",
+    "name": "tempo-run",
+    "slug": "tempo-run",
+    "scheme": "tempo-run",
     "platforms": ["ios", "android", "web"],
     "version": "1.0.0",
     "orientation": "portrait",
