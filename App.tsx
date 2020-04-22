@@ -244,7 +244,7 @@ const Track = ({ track }: TrackProps) => (
   </View>
 );
 
-const ListTracks = ({ seeds, playlistType, minTempo }) => {
+const ListTracks = ({ seeds, playlistType, minTempo, goToFirstScreen }) => {
   const [playlist, setPlaylist] = useState<SpotifyApi.PlaylistObjectFull>(
     undefined,
   );
@@ -308,6 +308,18 @@ const ListTracks = ({ seeds, playlistType, minTempo }) => {
             Create playlist
           </Button>
         )}
+        <Text
+          onPress={goToFirstScreen}
+          style={{
+            marginTop: 16,
+            marginLeft: 'auto',
+            fontWeight: 'bold',
+            textDecorationStyle: 'solid',
+            textDecorationLine: 'underline',
+          }}
+        >
+          Start Again?
+        </Text>
       </View>
     </View>
   );
@@ -611,6 +623,10 @@ export default function App() {
 
   const [screenIndex, setScreenIndex] = useState(0);
 
+  const goToFirstScreen = () => {
+    setScreenIndex(0);
+  };
+
   const goToNextScreen = () => {
     setScreenIndex(screenIndex + 1);
   };
@@ -690,6 +706,7 @@ export default function App() {
           playlistType={playlistType}
           seeds={seeds}
           minTempo={minTempo}
+          goToFirstScreen={goToFirstScreen}
         />
       ),
     },
