@@ -5,14 +5,15 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "web": "expo start --web",
-    "eject": "expo eject"
+    "eject": "expo eject",
+    "build:web": "expo build:web"
   },
   "dependencies": {
     "@types/ramda": "^0.27.3",
     "@types/spotify-api": "^0.0.3",
     "@types/spotify-web-api-node": "^4.0.1",
     "expo": "~37.0.3",
-    "expo-auth-session": "^1.0.1",
+    "expo-auth-session": "^1.1.0",
     "expo-web-browser": "^8.2.0",
     "ramda": "^0.27.0",
     "react": "~16.9.0",
@@ -29,6 +30,7 @@
     "@types/react": "~16.9.23",
     "@types/react-native": "~0.61.17",
     "babel-preset-expo": "~8.1.0",
+    "expo-cli": "~3.18.6",
     "typescript": "~3.8.3"
   },
   "private": true

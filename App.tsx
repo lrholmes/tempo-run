@@ -35,7 +35,7 @@ const SCOPE = [
   'user-library-read',
   'user-top-read',
   'user-read-recently-played',
-].join('%20');
+];
 
 const SPOTIFY_CLIENT_ID = '27aa5044b27d4f349c7eb7c513faa50c';
 export const LOGIN_URL = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=token&scope=${SCOPE}`;
@@ -44,8 +44,9 @@ const spotifyApi = new SpotifyWebApi({
   clientId: SPOTIFY_CLIENT_ID,
 });
 
+const redirectUrl = AuthSession.getRedirectUrl();
 export const login = async () => {
-  const redirectUrl = AuthSession.getRedirectUrl();
+  console.log({ redirectUrl });
   const result = await AuthSession.startAsync({
     authUrl: `${LOGIN_URL}&redirect_uri=${encodeURIComponent(redirectUrl)}`,
     returnUrl: Constants.linkingUri,
@@ -67,9 +68,27 @@ const getAuthState = async () => {
 
 const useSpotifyAuthentication = () => {
   const [token, setToken] = useState('');
-  const [authState, setAuthState] = useState<
-    AuthSessionResult['type'] | undefined
-  >(undefined);
+
+  const [, result, promptAsync] = AuthSession.useAuthRequest(
+    {
+      clientId: SPOTIFY_CLIENT_ID,
+      redirectUri: redirectUrl,
+      scopes: SCOPE,
+      usePKCE: false,
+      responseType: 'token',
+    },
+    {
+      authorizationEndpoint: 'https://accounts.spotify.com/authorize',
+    },
+  );
+
+  useEffect(() => {
+    if (result?.type === 'success') {
+      const { access_token: token, expires_in: expiresIn } = result.params;
+      setToken(token);
+      persistAuthState({ token, expiresIn });
+    }
+  }, [result?.type]);
 
   useEffect(() => {
     getAuthState().then((authState) => {
@@ -82,27 +101,16 @@ const useSpotifyAuthentication = () => {
     });
   }, []);
 
-  const handleLogin = () =>
-    login().then((result) => {
-      if (result.type === 'success') {
-        const { access_token: token, expires_in: expiresIn } = result.params;
-        setToken(token);
-        persistAuthState({
-          token,
-          expiresIn: new Date().getTime() + expiresIn,
-        });
-      }
-      setAuthState(result.type);
-      return result;
-    });
-
   useEffect(() => {
     if (token && spotifyApi) {
       spotifyApi.setAccessToken(token);
     }
   }, [token, spotifyApi]);
 
-  return { token, authState, handleLogin };
+  return {
+    token,
+    handleLogin: () => promptAsync({ useProxy: Platform.OS !== 'web' }),
+  };
 };
 
 interface FullTrackObjectWithAudioFeatures
