@@ -86,7 +86,10 @@ const useSpotifyAuthentication = () => {
     if (result?.type === 'success') {
       const { access_token: token, expires_in: expiresIn } = result.params;
       setToken(token);
-      persistAuthState({ token, expiresIn });
+      persistAuthState({
+        token,
+        expiresIn: new Date().getTime() + expiresIn * 1000,
+      });
     }
   }, [result?.type]);
 
