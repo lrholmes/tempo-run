@@ -15,7 +15,6 @@ import Constants from 'expo-constants';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import * as Font from 'expo-font';
-import { AuthSessionResult } from 'expo-auth-session/build/AuthSession.types';
 import SpotifyWebApi from 'spotify-web-api-node';
 import * as R from 'ramda';
 
@@ -45,14 +44,6 @@ const spotifyApi = new SpotifyWebApi({
 });
 
 const redirectUrl = AuthSession.getRedirectUrl();
-export const login = async () => {
-  console.log({ redirectUrl });
-  const result = await AuthSession.startAsync({
-    authUrl: `${LOGIN_URL}&redirect_uri=${encodeURIComponent(redirectUrl)}`,
-    returnUrl: Constants.linkingUri,
-  });
-  return result;
-};
 
 const persistAuthState = ({ token, expiresIn }) =>
   AsyncStorage.setItem('authState', JSON.stringify({ token, expiresIn }));
@@ -88,7 +79,7 @@ const useSpotifyAuthentication = () => {
       setToken(token);
       persistAuthState({
         token,
-        expiresIn: new Date().getTime() + expiresIn * 1000,
+        expiresIn: new Date().getTime() + Number(expiresIn) * 1000,
       });
     }
   }, [result?.type]);
@@ -233,6 +224,9 @@ const createPlaylist = async (
   const newPlaylist = await spotifyApi.createPlaylist(
     me.body.id,
     'Running Playlist',
+    {
+      description: 'Your running playlist, create using Tempo Run.',
+    },
   );
 
   await spotifyApi.addTracksToPlaylist(
@@ -533,21 +527,30 @@ const Seed = ({ disabled, isSelected, children, onPress }) => (
   </TouchableOpacity>
 );
 
+const SEEDS_TO_SHOW = 15;
+
 const DiscoverOptionsScreen = ({
   seeds = [],
   addSeed,
   removeSeed,
   confirmSeeds,
 }) => {
-  const [artists, setArtists] = useState<SpotifyApi.ArtistObjectFull>([]);
+  const [artists, setArtists] = useState<SpotifyApi.ArtistObjectFull[]>([]);
+  const [page, setPage] = useState(0);
 
   useEffect(() => {
-    spotifyApi.getMyTopArtists().then(({ body: { items } }) => {
+    spotifyApi.getMyTopArtists({ limit: 50 }).then(({ body: { items } }) => {
       setArtists(items);
     });
   }, []);
 
   const maxSelected = seeds.length > 4;
+
+  const numPages = Math.ceil(artists.length / SEEDS_TO_SHOW);
+  const firstIndex = (page % numPages) * SEEDS_TO_SHOW;
+  const lastIndex = firstIndex + SEEDS_TO_SHOW;
+
+  const artistsToShow = artists.slice(firstIndex, lastIndex);
 
   return (
     <View style={styles.content}>
@@ -556,30 +559,38 @@ const DiscoverOptionsScreen = ({
         What do you like to run to? Choose up to 5 artists or genres.
       </Text>
       <View style={{ marginTop: 16, flexDirection: 'row', flexWrap: 'wrap' }}>
-        {artists.map((artist) => {
-          const isSelected = seeds.find(({ name }) => name === artist.name);
-          return (
-            <Seed
-              key={artist.id}
-              isSelected={isSelected}
-              disabled={!isSelected && maxSelected}
-              onPress={() =>
-                isSelected
-                  ? removeSeed(artist.id)
-                  : maxSelected
-                  ? null
-                  : addSeed({
-                      id: artist.id,
-                      name: artist.name,
-                      type: 'ARTIST',
-                    })
-              }
-            >
-              {artist.name}
-            </Seed>
-          );
-        })}
+        {R.unionWith(R.eqBy(R.prop('id')), seeds, artistsToShow).map(
+          (artist) => {
+            const isSelected = seeds.find(({ name }) => name === artist.name);
+            return (
+              <Seed
+                key={artist.id}
+                isSelected={isSelected}
+                disabled={!isSelected && maxSelected}
+                onPress={() =>
+                  isSelected
+                    ? removeSeed(artist.id)
+                    : maxSelected
+                    ? null
+                    : addSeed({
+                        id: artist.id,
+                        name: artist.name,
+                        type: 'ARTIST',
+                      })
+                }
+              >
+                {artist.name}
+              </Seed>
+            );
+          },
+        )}
       </View>
+      <Text
+        style={{ textDecorationLine: 'underline' }}
+        onPress={() => setPage(page + 1)}
+      >
+        Refresh
+      </Text>
       <Button
         style={{ marginTop: 'auto' }}
         title="confirm"
