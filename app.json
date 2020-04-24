@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "tempo-run",
+    "name": "Tempo Run",
     "slug": "tempo-run",
     "scheme": "tempo-run",
     "platforms": ["ios", "android", "web"],
@@ -8,16 +8,17 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#000000"
     },
     "updates": {
       "fallbackToCacheTimeout": 0
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "co.temporun.temporun"
     }
   }
 }
