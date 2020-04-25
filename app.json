@@ -1,10 +1,11 @@
 {
   "expo": {
     "name": "Tempo Run",
+    "description": "Create running playlists personalised to your pace and taste",
     "slug": "tempo-run",
     "scheme": "tempo-run",
     "platforms": ["ios", "android", "web"],
-    "version": "1.0.1",
+    "version": "1.0.2",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
