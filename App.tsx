@@ -189,7 +189,10 @@ const getMySavedTracksWithAudioFeatures = async (
   const withAudioFeatures = await addAudioFeaturesToTracks(mySavedTracks);
 
   const filtered = R.compose(
-    R.filter(({ tempo, energy }) => energy > 0.5 && tempo > minTempo),
+    R.filter(
+      ({ tempo, energy, valence }) =>
+        valence > 0.3 && energy > 0.5 && tempo > minTempo,
+    ),
   )(withAudioFeatures);
 
   return filtered;
@@ -207,6 +210,7 @@ const getMyRecommendedTracksWithAudioFeatures = async ({
 
   const recommendedTracks = await spotifyApi.getRecommendations({
     min_energy: 0.5,
+    min_valence: 0.3,
     min_tempo: minTempo,
     limit: 50,
     seed_artists: artists,
@@ -545,6 +549,7 @@ const DiscoverOptionsScreen = ({
   }, []);
 
   const maxSelected = seeds.length > 4;
+  const confirmButtonValid = seeds.length > 0;
 
   const numPages = Math.ceil(artists.length / SEEDS_TO_SHOW);
   const firstIndex = (page % numPages) * SEEDS_TO_SHOW;
@@ -595,6 +600,7 @@ const DiscoverOptionsScreen = ({
         style={{ marginTop: 'auto' }}
         title="confirm"
         onPress={confirmSeeds}
+        disabled={!confirmButtonValid}
       >
         Confirm >>>
       </Button>
