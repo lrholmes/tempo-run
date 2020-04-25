@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Platform,
   StyleSheet,
-  Text,
+  Text as PrimitiveText,
   View,
   TouchableOpacity,
   Image,
@@ -10,8 +10,10 @@ import {
   Linking,
   SafeAreaView,
   AsyncStorage,
+  StatusBar,
 } from 'react-native';
 import Constants from 'expo-constants';
+import { AppearanceProvider, useColorScheme } from 'react-native-appearance';
 import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import * as Font from 'expo-font';
@@ -24,6 +26,13 @@ if (Platform.OS === 'web') {
   Constants.manifest.id = `@lawrenceholmes/${Constants.manifest.slug}`;
   WebBrowser.maybeCompleteAuthSession();
 }
+
+const colors = {
+  light: '#fff',
+  dark: '#222',
+  lightGray: '#f5f5f5',
+  darkGray: '#444',
+};
 
 const SCOPE = [
   'playlist-modify-public',
@@ -345,19 +354,66 @@ const TitleSection = () => (
   </View>
 );
 
-const Button = ({ disabled, onPress, style, children, ...props }) => (
-  <TouchableOpacity
-    {...props}
-    style={[buttonStyles.button, { opacity: disabled ? 0.7 : 1 }, style]}
-    onPress={disabled ? null : onPress}
-  >
-    <Text style={buttonStyles.buttonText}>{children}</Text>
-  </TouchableOpacity>
-);
+const useDarkMode = () => {
+  const colorScheme = useColorScheme();
+  console.log({ colorScheme });
+  return colorScheme === 'dark';
+};
+
+const Text = ({ style, color, ...props }) => {
+  const darkMode = useDarkMode();
+
+  const lightModeColor = color?.lightMode ?? colors.dark;
+  const darkModeColor = color?.darkMode ?? colors.light;
+  return (
+    <PrimitiveText
+      style={[
+        { color: darkMode ? darkModeColor : lightModeColor },
+        ...(Array.isArray(style) ? style : [style]),
+      ]}
+      {...props}
+    />
+  );
+};
+
+const ButtonText = ({ style, children }) => {
+  const darkMode = useDarkMode();
+  return (
+    <Text
+      style={[
+        buttonStyles.buttonText,
+        ...(Array.isArray(style) ? style : [style]),
+        { color: darkMode ? colors.dark : colors.light },
+      ]}
+    >
+      {children}
+    </Text>
+  );
+};
+
+const Button = ({ disabled, onPress, style, children, ...props }) => {
+  const darkMode = useDarkMode();
+  return (
+    <TouchableOpacity
+      {...props}
+      style={[
+        buttonStyles.button,
+        {
+          backgroundColor: darkMode ? colors.light : colors.dark,
+          opacity: disabled ? 0.7 : 1,
+        },
+        style,
+      ]}
+      onPress={disabled ? null : onPress}
+    >
+      <ButtonText>{children}</ButtonText>
+    </TouchableOpacity>
+  );
+};
 
 const buttonStyles = StyleSheet.create({
   button: {
-    backgroundColor: '#000',
+    backgroundColor: colors.dark,
     borderRadius: 0,
     padding: 12,
     alignItems: 'center',
@@ -365,7 +421,6 @@ const buttonStyles = StyleSheet.create({
   buttonText: {
     textTransform: 'uppercase',
     fontFamily: 'Syncopate',
-    color: '#fff',
   },
 });
 
@@ -407,6 +462,33 @@ const PACE_OPTIONS = [
   },
 ];
 
+const BigButton = ({ children, onPress }) => {
+  const darkMode = useDarkMode();
+  return (
+    <View
+      style={{
+        flexBasis: '50%',
+        flexGrow: 1,
+        minWidth: 300,
+        padding: 4,
+      }}
+    >
+      <TouchableOpacity
+        onPress={onPress}
+        style={[
+          buttonStyles.button,
+          {
+            backgroundColor: darkMode ? colors.light : colors.dark,
+            alignItems: 'center',
+          },
+        ]}
+      >
+        {children}
+      </TouchableOpacity>
+    </View>
+  );
+};
+
 const PaceScreen = ({ handleChooseTempo }) => (
   <View style={styles.content}>
     <Text style={typographyStyles.heading}>What's your pace?</Text>
@@ -420,40 +502,15 @@ const PaceScreen = ({ handleChooseTempo }) => (
       }}
     >
       {PACE_OPTIONS.map(({ kmMinsUpper, kmMinsLower, bpmLower }, index) => (
-        <View
-          key={index}
-          style={{
-            flexBasis: '50%',
-            flexGrow: 1,
-            minWidth: 300,
-            padding: 4,
-          }}
-        >
-          <TouchableOpacity
-            onPress={() => handleChooseTempo(bpmLower)}
-            style={[
-              buttonStyles.button,
-              {
-                alignItems: 'center',
-              },
-            ]}
-          >
-            <Text style={buttonStyles.buttonText}>
-              {kmMinsLower} - {kmMinsUpper} mins per km
-            </Text>
-            <Text style={[buttonStyles.buttonText, { marginTop: 8 }]}>
-              {bpmLower} BPM+
-            </Text>
-            <Text
-              style={[
-                buttonStyles.buttonText,
-                { marginTop: 8, color: '#f5f5f5' },
-              ]}
-            >
-              {'>'.repeat(index + 1)}
-            </Text>
-          </TouchableOpacity>
-        </View>
+        <BigButton key={index} onPress={() => handleChooseTempo(bpmLower)}>
+          <ButtonText>
+            {kmMinsLower} - {kmMinsUpper} mins per km
+          </ButtonText>
+          <ButtonText style={{ marginTop: 8 }}>{bpmLower} BPM+</ButtonText>
+          <ButtonText style={{ marginTop: 8, color: colors.lightGray }}>
+            {'>'.repeat(index + 1)}
+          </ButtonText>
+        </BigButton>
       ))}
     </View>
   </View>
@@ -466,76 +523,65 @@ const PlaylistTypeScreen = ({ handleChoosePlaylistType }) => (
     <View
       style={{ flexDirection: 'row', flexWrap: 'wrap', marginHorizontal: -4 }}
     >
-      <View
-        style={{
-          flexBasis: '50%',
-          flexGrow: 1,
-          minWidth: 300,
-          padding: 4,
-        }}
-      >
-        <TouchableOpacity
-          onPress={() => handleChoosePlaylistType('DISCOVER')}
-          style={[
-            buttonStyles.button,
-            {
-              alignItems: 'flex-start',
-            },
-          ]}
-        >
-          <Text style={buttonStyles.buttonText}>Discover >>></Text>
-          <Text style={{ marginTop: 8, color: '#f5f5f5' }}>
+      <BigButton onPress={() => handleChoosePlaylistType('DISCOVER')}>
+        <View style={{ alignItems: 'flex-start' }}>
+          <ButtonText>Discover >>></ButtonText>
+          <Text
+            color={{
+              lightMode: colors.lightGray,
+              darkMode: colors.darkGray,
+            }}
+            style={{ marginTop: 8 }}
+          >
             Branch out. Get a playlist of tracks, some you might already know,
             most you probably haven’t heard before
           </Text>
-        </TouchableOpacity>
-      </View>
-      <View
-        style={{
-          flexBasis: '50%',
-          flexGrow: 1,
-          minWidth: 300,
-          padding: 4,
-        }}
-      >
-        <TouchableOpacity
-          onPress={() => handleChoosePlaylistType('MY_TRACKS')}
-          style={[
-            buttonStyles.button,
-            {
-              alignItems: 'flex-start',
-            },
-          ]}
-        >
-          <Text style={buttonStyles.buttonText}>My Tracks >>></Text>
-          <Text style={{ marginTop: 8, color: '#f5f5f5' }}>
+        </View>
+      </BigButton>
+      <BigButton onPress={() => handleChoosePlaylistType('MY_TRACKS')}>
+        <View style={{ alignItems: 'flex-start' }}>
+          <ButtonText>My Tracks >>></ButtonText>
+          <Text
+            color={{
+              lightMode: colors.lightGray,
+              darkMode: colors.darkGray,
+            }}
+            style={{ marginTop: 8 }}
+          >
             Get a playlist exclusively of tracks that you already love and
             listen to regularly
           </Text>
-        </TouchableOpacity>
-      </View>
+        </View>
+      </BigButton>
     </View>
   </View>
 );
 
-const Seed = ({ disabled, isSelected, children, onPress }) => (
-  <TouchableOpacity
-    onPress={onPress}
-    style={{
-      marginRight: 8,
-      marginBottom: 8,
-      paddingVertical: 4,
-      paddingHorizontal: 8,
-      borderWidth: 1,
-      borderColor: '#000',
-      backgroundColor: isSelected ? '#000' : '#fff',
-      opacity: disabled ? 0.5 : 1,
-    }}
-  >
-    <Text style={{ color: isSelected ? '#fff' : '#000' }}>{children}</Text>
-  </TouchableOpacity>
-);
+const Seed = ({ disabled, isSelected, children, onPress }) => {
+  const darkMode = useDarkMode();
 
+  const color = darkMode ? colors.light : colors.dark;
+  const contrastColor = darkMode ? colors.dark : colors.light;
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={{
+        marginRight: 8,
+        marginBottom: 8,
+        paddingVertical: 4,
+        paddingHorizontal: 8,
+        borderWidth: 1,
+        borderColor: color,
+        backgroundColor: isSelected ? color : contrastColor,
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <Text style={{ color: isSelected ? contrastColor : color }}>
+        {children}
+      </Text>
+    </TouchableOpacity>
+  );
+};
 const SEEDS_TO_SHOW = 15;
 
 const DiscoverOptionsScreen = ({
@@ -644,7 +690,7 @@ const ScreenTransition = posed(AnimateComponent)({
   },
 });
 
-export default function App() {
+const App = () => {
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const { token, expires, handleLogin } = useSpotifyAuthentication();
 
@@ -654,6 +700,10 @@ export default function App() {
   const [seeds, setSeeds] = useState<Seed[]>([]);
 
   const [screenIndex, setScreenIndex] = useState(0);
+
+  const darkMode = useDarkMode();
+
+  const themeStatusBarStyle = darkMode ? 'light-content' : 'dark-content';
 
   const goToFirstScreen = () => {
     setScreenIndex(0);
@@ -759,48 +809,63 @@ export default function App() {
   const progressPercentage = (shownNumber / screens.length) * 100;
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.titleContainer}>
-        <TitleSection />
-      </View>
-      <View style={styles.underlineContainer}>
-        <Progress
-          pose="progress"
-          poseKey={progressPercentage}
-          progress={
-            currentScreen.name !== 'initial' ? `${progressPercentage}%` : '100%'
-          }
-          style={{
-            height: 8,
-            backgroundColor: '#000',
-          }}
-        />
-      </View>
-      <View style={{ flex: 1, position: 'relative' }}>
-        <Transition preEnterPose="initial" exitPose="exit">
-          <ScreenTransition
+    <View
+      style={{
+        flex: 1,
+        backgroundColor: darkMode ? colors.dark : colors.light,
+      }}
+    >
+      <StatusBar barStyle={themeStatusBarStyle} />
+      <SafeAreaView style={[styles.container]}>
+        <View style={styles.titleContainer}>
+          <TitleSection />
+        </View>
+        <View style={styles.underlineContainer}>
+          <Progress
+            pose="progress"
+            poseKey={progressPercentage}
+            progress={
+              currentScreen.name !== 'initial'
+                ? `${progressPercentage}%`
+                : '100%'
+            }
             style={{
-              flex: 1,
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
+              height: 8,
+              backgroundColor: darkMode ? colors.light : colors.dark,
             }}
-            key={screenIndex}
-          >
-            {currentScreen.component}
-          </ScreenTransition>
-        </Transition>
-      </View>
-    </SafeAreaView>
+          />
+        </View>
+        <View style={{ flex: 1, position: 'relative' }}>
+          <Transition preEnterPose="initial" exitPose="exit">
+            <ScreenTransition
+              style={{
+                flex: 1,
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+              }}
+              key={screenIndex}
+            >
+              {currentScreen.component}
+            </ScreenTransition>
+          </Transition>
+        </View>
+      </SafeAreaView>
+    </View>
   );
-}
+};
+
+export default () => (
+  <AppearanceProvider>
+    <App />
+  </AppearanceProvider>
+);
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
     maxWidth: 700,
     width: '100%',
     height: '100%',
@@ -829,10 +894,6 @@ const styles = StyleSheet.create({
     padding: 24,
     flex: 1,
     height: '100%',
-  },
-  textInput: {
-    padding: 8,
-    backgroundColor: '#f5f5f5',
   },
 });
 
