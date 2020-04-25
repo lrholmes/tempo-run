@@ -59,6 +59,7 @@ const getAuthState = async () => {
 
 const useSpotifyAuthentication = () => {
   const [token, setToken] = useState('');
+  const [expires, setExpires] = useState('');
 
   const [, result, promptAsync] = AuthSession.useAuthRequest(
     {
@@ -76,10 +77,12 @@ const useSpotifyAuthentication = () => {
   useEffect(() => {
     if (result?.type === 'success') {
       const { access_token: token, expires_in: expiresIn } = result.params;
+      const expires = new Date().getTime() + Number(expiresIn) * 1000;
       setToken(token);
+      setExpires(expires);
       persistAuthState({
         token,
-        expiresIn: new Date().getTime() + Number(expiresIn) * 1000,
+        expiresIn: expires,
       });
     }
   }, [result?.type]);
@@ -90,6 +93,7 @@ const useSpotifyAuthentication = () => {
         const timeNow = new Date().getTime();
         if (authState.expiresIn > timeNow) {
           setToken(authState.token);
+          setExpires(authState.expiresIn);
         }
       }
     });
@@ -103,6 +107,7 @@ const useSpotifyAuthentication = () => {
 
   return {
     token,
+    expires,
     handleLogin: () => promptAsync({ useProxy: Platform.OS !== 'web' }),
   };
 };
@@ -641,7 +646,7 @@ const ScreenTransition = posed(AnimateComponent)({
 
 export default function App() {
   const [fontsLoaded, setFontsLoaded] = useState(false);
-  const { token, handleLogin } = useSpotifyAuthentication();
+  const { token, expires, handleLogin } = useSpotifyAuthentication();
 
   const [playlistType, setPlaylistType] = useState('');
   const [minTempo, setMinTempo] = useState(0);
@@ -693,9 +698,14 @@ export default function App() {
       component: (
         <InitialScreen
           isLoggedIn={Boolean(token)}
-          onButtonClick={
-            token ? goToNextScreen : () => handleLogin().then(goToNextScreen)
-          }
+          onButtonClick={() => {
+            const currentTime = new Date().getTime();
+            if (token && expires > currentTime) {
+              goToNextScreen();
+              return;
+            }
+            handleLogin().then(goToNextScreen);
+          }}
         />
       ),
     },
