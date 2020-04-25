@@ -356,7 +356,6 @@ const TitleSection = () => (
 
 const useDarkMode = () => {
   const colorScheme = useColorScheme();
-  console.log({ colorScheme });
   return colorScheme === 'dark';
 };
 
