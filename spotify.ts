@@ -1,4 +1,4 @@
-import * as R from 'ramda';
+import * as R from 'remeda';
 import SpotifyWebApi from 'spotify-web-api-node';
 
 export const SPOTIFY_CLIENT_ID = '27aa5044b27d4f349c7eb7c513faa50c';
@@ -7,17 +7,17 @@ export const spotifyApi = new SpotifyWebApi({
   clientId: SPOTIFY_CLIENT_ID,
 });
 
-const mergeById = R.compose(
-  R.map(R.mergeAll),
-  R.values,
-  R.groupBy(R.prop('id')),
-);
+import { Seed } from './App';
+
+// tracks should probably be at least a bit happy
+const MIN_VALENCE = 0.3;
+const MIN_ENERGY = 0.5;
 
 const getAudioFeaturesForTracks = async (
   trackIds: string[],
 ): Promise<SpotifyApi.AudioFeaturesObject[]> => {
   // limit per request on fetching audio features is 100
-  const groupedTrackIds = R.splitEvery(100, trackIds);
+  const groupedTrackIds = R.chunk(trackIds, 100);
 
   const audioFeatureRequests = groupedTrackIds.map((tracks) =>
     spotifyApi.getAudioFeaturesForTracks(tracks),
@@ -25,38 +25,51 @@ const getAudioFeaturesForTracks = async (
 
   const audioFeaturesData = await Promise.all(audioFeatureRequests);
 
-  const flattened = R.compose(
-    R.flatten,
-    R.map(R.path(['body', 'audio_features'])),
-  )(audioFeaturesData);
+  const audioFeatures = audioFeaturesData.map(
+    (audioFeaturesResponse) => audioFeaturesResponse.body?.audio_features,
+  );
 
-  return flattened;
+  return R.flatten(audioFeatures);
 };
 
 type VariableTrackObject =
   | SpotifyApi.TrackObjectSimplified
-  | SpotifyApi.TrackObjectFull
-  | SpotifyApi.SavedTrackObject;
+  | SpotifyApi.TrackObjectFull;
+
+type VariableTrackObjectWithAudioFeatures = VariableTrackObject &
+  SpotifyApi.AudioFeaturesObject;
 
 const addAudioFeaturesToTracks = async (
   tracks: VariableTrackObject[],
-): Promise<VariableTrackObject[]> => {
-  const audioFeatures = await getAudioFeaturesForTracks(R.pluck('id', tracks));
+): Promise<VariableTrackObjectWithAudioFeatures[]> => {
+  const audioFeatures = await getAudioFeaturesForTracks(
+    R.map(tracks, ({ id }) => id),
+  );
 
-  return mergeById(R.concat(tracks, audioFeatures));
+  const mergedById: VariableTrackObjectWithAudioFeatures[] = R.pipe(
+    R.concat(tracks, audioFeatures),
+    R.groupBy(({ id }) => id),
+    Object.values,
+    R.map((value) => R.mergeAll(value)),
+  );
+
+  return mergedById;
 };
 
 const getSavedTracks = async (
   fetchUpTo: number,
-  tracks: SpotifyApi.SavedTrackObject[] = [],
-): Promise<SpotifyApi.SavedTrackObject[]> => {
+  tracks: SpotifyApi.TrackObjectFull[] = [],
+): Promise<SpotifyApi.TrackObjectFull[]> => {
   const savedTrackData = await spotifyApi.getMySavedTracks({
     limit: 50,
     offset: tracks.length,
   });
 
   const hasNext = Boolean(savedTrackData.body.next);
-  const newTracks = [...tracks, ...R.pluck('track', savedTrackData.body.items)];
+  const newTracks = [
+    ...tracks,
+    ...savedTrackData.body.items.map(({ track }) => track),
+  ];
 
   if (hasNext && newTracks.length < fetchUpTo) {
     return getSavedTracks(fetchUpTo, newTracks);
@@ -74,32 +87,29 @@ export const getMySavedTracksWithAudioFeatures = async (
   const mySavedTracks = await getSavedTracks(1000);
   const withAudioFeatures = await addAudioFeaturesToTracks(mySavedTracks);
 
-  const filtered = R.compose(
-    R.filter(
-      ({ tempo, energy, valence }) =>
-        valence > 0.3 && energy > 0.5 && tempo > minTempo,
-    ),
-  )(withAudioFeatures);
+  const filtered = withAudioFeatures.filter(
+    ({ tempo, energy, valence }) =>
+      valence > MIN_VALENCE && energy > MIN_ENERGY && tempo > minTempo,
+  );
 
-  return filtered;
+  return filtered as FullTrackObjectWithAudioFeatures[];
 };
 
-export const getMyRecommendedTracksWithAudioFeatures = async (
+export const getMyRecommendedTracks = async (
   seeds: Seed[],
   minTempo: number,
 ): Promise<SpotifyApi.TrackObjectSimplified[]> => {
-  const artists = R.compose(
-    R.slice(0, 5),
-    R.pluck('id'),
-    R.filter(R.propEq('type', 'ARTIST')),
-  )(seeds);
+  const artistIds = seeds
+    .filter(({ type }) => type === 'ARTIST')
+    .map(({ id }) => id)
+    .slice(0, 5);
 
   const recommendedTracks = await spotifyApi.getRecommendations({
-    min_energy: 0.5,
-    min_valence: 0.3,
+    min_energy: MIN_ENERGY,
+    min_valence: MIN_VALENCE,
     min_tempo: minTempo,
     limit: 50,
-    seed_artists: artists,
+    seed_artists: artistIds,
   });
 
   return recommendedTracks.body.tracks;

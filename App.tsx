@@ -20,14 +20,14 @@ import {
 import { AppearanceProvider, useColorScheme } from 'react-native-appearance';
 import * as WebBrowser from 'expo-web-browser';
 import * as Font from 'expo-font';
-import * as R from 'ramda';
+import * as R from 'remeda';
 
 import posed, { Transition } from './pose';
 import {
   FullTrackObjectWithAudioFeatures,
   spotifyApi,
   getMySavedTracksWithAudioFeatures,
-  getMyRecommendedTracksWithAudioFeatures,
+  getMyRecommendedTracks,
   createPlaylist,
 } from './spotify';
 import { useSpotifyAuthentication } from './useSpotifyAuthentication';
@@ -137,7 +137,7 @@ interface TrackProps {
 const Track: FunctionComponent<TrackProps> = ({ track }) => (
   <View style={{ marginBottom: 8 }}>
     <Text style={{ fontWeight: 'bold' }}>{track.name}</Text>
-    <Text>{R.pluck('name', track.artists).join(', ')}</Text>
+    <Text>{track.artists.map(({ name }) => name).join(', ')}</Text>
   </View>
 );
 
@@ -164,7 +164,7 @@ const ListTracks: FunctionComponent<ListTracksProps> = ({
   useEffect(() => {
     const getTracks =
       playlistType === 'DISCOVER'
-        ? getMyRecommendedTracksWithAudioFeatures(seeds, minTempo)
+        ? getMyRecommendedTracks(seeds, minTempo)
         : getMySavedTracksWithAudioFeatures(minTempo);
     getTracks.then((tracks) => {
       setTracks(tracks);
@@ -173,7 +173,7 @@ const ListTracks: FunctionComponent<ListTracksProps> = ({
   }, []);
 
   const handleCreatePlaylist = () => {
-    createPlaylist(R.pluck('uri', tracks)).then((playlist) => {
+    createPlaylist(R.map(tracks, ({ uri }) => uri)).then((playlist) => {
       setPlaylist(playlist);
     });
   };
@@ -453,8 +453,10 @@ const DiscoverOptionsScreen: FunctionComponent<DiscoverOptionsScreenProps> = ({
   const firstIndex = (page % numPages) * SEEDS_TO_SHOW;
   const lastIndex = firstIndex + SEEDS_TO_SHOW;
 
+  const selectedArtistIds = seeds.map(({ id }) => id);
   const artistsToShow: Seed[] = artists
     .slice(firstIndex, lastIndex)
+    .filter(({ id }) => !selectedArtistIds.includes(id))
     .map(({ id, name }) => ({ id, name, type: 'ARTIST' }));
 
   return (
@@ -464,33 +466,31 @@ const DiscoverOptionsScreen: FunctionComponent<DiscoverOptionsScreenProps> = ({
         What do you like to run to? Choose up to 5 artists or genres.
       </Text>
       <View style={{ marginTop: 16, flexDirection: 'row', flexWrap: 'wrap' }}>
-        {R.unionWith(R.eqBy(R.prop('id')), seeds, artistsToShow).map(
-          (seed: Seed) => {
-            const isSelected = Boolean(
-              seeds.find(({ name }) => name === seed.name),
-            );
-            return (
-              <Seed
-                key={seed.id}
-                isSelected={isSelected}
-                disabled={!isSelected && maxSelected}
-                onPress={() =>
-                  isSelected
-                    ? removeSeed(seed.id)
-                    : maxSelected
-                    ? undefined
-                    : addSeed({
-                        id: seed.id,
-                        name: seed.name,
-                        type: 'ARTIST',
-                      })
-                }
-              >
-                {seed.name}
-              </Seed>
-            );
-          },
-        )}
+        {[...seeds, ...artistsToShow].map((seed: Seed) => {
+          const isSelected = Boolean(
+            seeds.find(({ name }) => name === seed.name),
+          );
+          return (
+            <Seed
+              key={seed.id}
+              isSelected={isSelected}
+              disabled={!isSelected && maxSelected}
+              onPress={() =>
+                isSelected
+                  ? removeSeed(seed.id)
+                  : maxSelected
+                  ? undefined
+                  : addSeed({
+                      id: seed.id,
+                      name: seed.name,
+                      type: 'ARTIST',
+                    })
+              }
+            >
+              {seed.name}
+            </Seed>
+          );
+        })}
       </View>
       <Text
         style={{ textDecorationLine: 'underline' }}
@@ -509,7 +509,7 @@ const DiscoverOptionsScreen: FunctionComponent<DiscoverOptionsScreenProps> = ({
   );
 };
 
-interface Seed {
+export interface Seed {
   id: string;
   name: string;
   type: 'ARTIST' | 'GENRE';
@@ -573,11 +573,11 @@ const App = () => {
   };
 
   const addSeed = (seed: Seed) => {
-    setSeeds(R.append(seed, seeds));
+    setSeeds([...seeds, seed]);
   };
 
-  const removeSeed = (id: string) => {
-    setSeeds(R.reject(R.propEq('id', id)));
+  const removeSeed = (seedId: string) => {
+    setSeeds(R.reject(({ id }) => id === seedId));
   };
 
   const handleChoosePlaylistType = (playlistType: PlaylistType) => {
@@ -660,10 +660,7 @@ const App = () => {
 
   const currentScreen = screens[screenIndex];
 
-  const shownNumber = R.compose(
-    R.length,
-    R.slice(0, R.inc(screenIndex)),
-  )(screens);
+  const shownNumber = screens.slice(0, screenIndex + 1).length;
 
   const progressPercentage = (shownNumber / screens.length) * 100;
 
