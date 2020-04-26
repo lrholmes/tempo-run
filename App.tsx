@@ -1,29 +1,38 @@
-import React, { useState, useEffect } from 'react';
+import React, {
+  useState,
+  useEffect,
+  FunctionComponent,
+  ReactElement,
+} from 'react';
 import {
   Platform,
   StyleSheet,
   Text as PrimitiveText,
+  TextProps as PrimitiveTextProps,
   View,
   TouchableOpacity,
-  Image,
   ScrollView,
   Linking,
   SafeAreaView,
-  AsyncStorage,
   StatusBar,
+  TouchableOpacityProps,
 } from 'react-native';
-import Constants from 'expo-constants';
 import { AppearanceProvider, useColorScheme } from 'react-native-appearance';
-import * as AuthSession from 'expo-auth-session';
 import * as WebBrowser from 'expo-web-browser';
 import * as Font from 'expo-font';
-import SpotifyWebApi from 'spotify-web-api-node';
 import * as R from 'ramda';
 
 import posed, { Transition } from './pose';
+import {
+  FullTrackObjectWithAudioFeatures,
+  spotifyApi,
+  getMySavedTracksWithAudioFeatures,
+  getMyRecommendedTracksWithAudioFeatures,
+  createPlaylist,
+} from './spotify';
+import { useSpotifyAuthentication } from './useSpotifyAuthentication';
 
 if (Platform.OS === 'web') {
-  Constants.manifest.id = `@lawrenceholmes/${Constants.manifest.slug}`;
   WebBrowser.maybeCompleteAuthSession();
 }
 
@@ -34,251 +43,128 @@ const colors = {
   darkGray: '#444',
 };
 
-const SCOPE = [
-  'playlist-modify-public',
-  'playlist-modify-private',
-  'user-read-private',
-  'ugc-image-upload',
-  'user-follow-read',
-  'user-library-read',
-  'user-top-read',
-  'user-read-recently-played',
-];
+const useDarkMode = () => {
+  const colorScheme = useColorScheme();
+  return colorScheme === 'dark';
+};
 
-const SPOTIFY_CLIENT_ID = '27aa5044b27d4f349c7eb7c513faa50c';
-export const LOGIN_URL = `https://accounts.spotify.com/authorize?client_id=${SPOTIFY_CLIENT_ID}&response_type=token&scope=${SCOPE}`;
+type PlaylistType = 'DISCOVER' | 'MY_TRACKS';
 
-const spotifyApi = new SpotifyWebApi({
-  clientId: SPOTIFY_CLIENT_ID,
+interface TextProps extends PrimitiveTextProps {
+  color?: {
+    lightMode: string;
+    darkMode: string;
+  };
+}
+const Text: FunctionComponent<TextProps> = ({ style, color, ...props }) => {
+  const darkMode = useDarkMode();
+
+  const lightModeColor = color?.lightMode ?? colors.dark;
+  const darkModeColor = color?.darkMode ?? colors.light;
+  return (
+    <PrimitiveText
+      style={[
+        { color: darkMode ? darkModeColor : lightModeColor },
+        ...(Array.isArray(style) ? style : [style]),
+      ]}
+      {...props}
+    />
+  );
+};
+
+const ButtonText: FunctionComponent<PrimitiveTextProps> = ({
+  style,
+  ...props
+}: PrimitiveTextProps) => {
+  const darkMode = useDarkMode();
+  return (
+    <Text
+      style={[
+        buttonStyles.buttonText,
+        ...(Array.isArray(style) ? style : [style]),
+        { color: darkMode ? colors.dark : colors.light },
+      ]}
+      {...props}
+    />
+  );
+};
+
+interface ButtonProps extends TouchableOpacityProps {
+  disabled?: boolean;
+}
+const Button: FunctionComponent<ButtonProps> = ({
+  disabled,
+  onPress,
+  style,
+  children,
+  ...props
+}) => {
+  const darkMode = useDarkMode();
+  return (
+    <TouchableOpacity
+      {...props}
+      style={[
+        buttonStyles.button,
+        {
+          backgroundColor: darkMode ? colors.light : colors.dark,
+          opacity: disabled ? 0.7 : 1,
+        },
+        style,
+      ]}
+      onPress={disabled ? undefined : onPress}
+    >
+      <ButtonText>{children}</ButtonText>
+    </TouchableOpacity>
+  );
+};
+
+const buttonStyles = StyleSheet.create({
+  button: {
+    backgroundColor: colors.dark,
+    borderRadius: 0,
+    padding: 12,
+    alignItems: 'center',
+  },
+  buttonText: {
+    textTransform: 'uppercase',
+    fontFamily: 'Syncopate',
+  },
 });
 
-const redirectUrl = AuthSession.getRedirectUrl();
-
-const persistAuthState = ({ token, expiresIn }) =>
-  AsyncStorage.setItem('authState', JSON.stringify({ token, expiresIn }));
-
-const getAuthState = async () => {
-  const jsonString = await AsyncStorage.getItem('authState');
-  try {
-    return jsonString ? JSON.parse(jsonString) : null;
-  } catch {
-    return null;
-  }
-};
-
-const useSpotifyAuthentication = () => {
-  const [token, setToken] = useState('');
-  const [expires, setExpires] = useState('');
-
-  const [, result, promptAsync] = AuthSession.useAuthRequest(
-    {
-      clientId: SPOTIFY_CLIENT_ID,
-      redirectUri: redirectUrl,
-      scopes: SCOPE,
-      usePKCE: false,
-      responseType: 'token',
-    },
-    {
-      authorizationEndpoint: 'https://accounts.spotify.com/authorize',
-    },
-  );
-
-  useEffect(() => {
-    if (result?.type === 'success') {
-      const { access_token: token, expires_in: expiresIn } = result.params;
-      const expires = new Date().getTime() + Number(expiresIn) * 1000;
-      setToken(token);
-      setExpires(expires);
-      persistAuthState({
-        token,
-        expiresIn: expires,
-      });
-    }
-  }, [result?.type]);
-
-  useEffect(() => {
-    getAuthState().then((authState) => {
-      if (authState) {
-        const timeNow = new Date().getTime();
-        if (authState.expiresIn > timeNow) {
-          setToken(authState.token);
-          setExpires(authState.expiresIn);
-        }
-      }
-    });
-  }, []);
-
-  useEffect(() => {
-    if (token && spotifyApi) {
-      spotifyApi.setAccessToken(token);
-    }
-  }, [token, spotifyApi]);
-
-  return {
-    token,
-    expires,
-    handleLogin: () => promptAsync({ useProxy: Platform.OS !== 'web' }),
-  };
-};
-
-interface FullTrackObjectWithAudioFeatures
-  extends SpotifyApi.TrackObjectFull,
-    SpotifyApi.AudioFeaturesObject {}
-
-const mergeById = R.compose(
-  R.map(R.mergeAll),
-  R.values,
-  R.groupBy(R.prop('id')),
-);
-
-const getAudioFeaturesForTracks = async (
-  tracks: SpotifyApi.TrackObjectFull[] | SpotifyApi.TrackObjectSimplified[],
-): SpotifyApi.AudioFeaturesObject[] => {
-  // limit per request on fetching audio features is 100
-  const groupedTrackIds = R.compose(R.splitEvery(100), R.pluck('id'))(tracks);
-
-  const audioFeaturesData = await Promise.all(
-    groupedTrackIds.map((trackIds) =>
-      spotifyApi.getAudioFeaturesForTracks(trackIds),
-    ),
-  );
-
-  const flattened = R.compose(
-    R.flatten,
-    R.map(R.path(['body', 'audio_features'])),
-  )(audioFeaturesData);
-
-  return flattened;
-};
-
-const addAudioFeaturesToTracks = async (
-  tracks: SpotifyApi.TrackObjectSimplified[] | SpotifyApi.TrackObjectFull[],
-) => {
-  const audioFeatures = await getAudioFeaturesForTracks(tracks);
-
-  return mergeById(R.concat(tracks, audioFeatures));
-};
-
-const getMyTopTracksWithAudioFeatures = async (): FullTrackObjectWithAudioFeatures[] => {
-  const myTopTracksData = await Promise.all([
-    spotifyApi.getMyTopTracks({ limit: 50, time_range: 'short_term' }),
-    spotifyApi.getMyTopTracks({ limit: 50, time_range: 'medium_term' }),
-    spotifyApi.getMyTopTracks({ limit: 50, time_range: 'long_term' }),
-  ]);
-
-  const myTopTracks = R.compose(
-    R.uniqBy(R.prop('id')),
-    R.flatten,
-    R.map(R.path(['body', 'items'])),
-  )(myTopTracksData);
-
-  const withAudioFeatures = await addAudioFeaturesToTracks(myTopTracks);
-
-  return withAudioFeatures;
-};
-
-const getSavedTracks = async (
-  fetchUpTo: number,
-  tracks: SpotifyApi.SavedTrackObject[] = [],
-) => {
-  const savedTrackData = await spotifyApi.getMySavedTracks({
-    limit: 50,
-    offset: tracks.length,
-  });
-
-  const hasNext = Boolean(savedTrackData.body.next);
-  const newTracks = [...tracks, ...R.pluck('track', savedTrackData.body.items)];
-
-  if (hasNext && newTracks.length < fetchUpTo) {
-    return getSavedTracks(fetchUpTo, newTracks);
-  }
-
-  return newTracks;
-};
-
-const getMySavedTracksWithAudioFeatures = async (
-  minTempo: number = 165,
-): FullTrackObjectWithAudioFeatures[] => {
-  const mySavedTracks = await getSavedTracks(1000);
-  const withAudioFeatures = await addAudioFeaturesToTracks(mySavedTracks);
-
-  const filtered = R.compose(
-    R.filter(
-      ({ tempo, energy, valence }) =>
-        valence > 0.3 && energy > 0.5 && tempo > minTempo,
-    ),
-  )(withAudioFeatures);
-
-  return filtered;
-};
-
-const getMyRecommendedTracksWithAudioFeatures = async ({
-  seeds,
-  minTempo,
-}): SpotifyApi.TrackObjectSimplified[] => {
-  const artists = R.compose(
-    R.slice(0, 5),
-    R.pluck('id'),
-    R.filter(R.propEq('type', 'ARTIST')),
-  )(seeds);
-
-  const recommendedTracks = await spotifyApi.getRecommendations({
-    min_energy: 0.5,
-    min_valence: 0.3,
-    min_tempo: minTempo,
-    limit: 50,
-    seed_artists: artists,
-  });
-
-  return recommendedTracks.body.tracks;
-};
-
-const createPlaylist = async (
-  tracks:
-    | SpotifyApi.TrackObjectSimplified[]
-    | FullTrackObjectWithAudioFeatures[],
-): SpotifyApi.PlaylistObjectFull => {
-  const me = await spotifyApi.getMe();
-  const newPlaylist = await spotifyApi.createPlaylist(
-    me.body.id,
-    'Running Playlist',
-    {
-      description: 'Your running playlist, create using Tempo Run.',
-    },
-  );
-
-  await spotifyApi.addTracksToPlaylist(
-    newPlaylist.body.id,
-    R.pluck('uri', tracks),
-  );
-
-  return newPlaylist.body;
-};
-
 interface TrackProps {
-  track: SpotifyApi.TrackObjectFull | SpotifyApi.TrackObjectSimplified;
+  track: FullTrackObjectWithAudioFeatures | SpotifyApi.TrackObjectSimplified;
 }
-const Track = ({ track }: TrackProps) => (
+const Track: FunctionComponent<TrackProps> = ({ track }) => (
   <View style={{ marginBottom: 8 }}>
-    {track.album && <Image source={{ uri: R.last(track.album.images)?.url }} />}
     <Text style={{ fontWeight: 'bold' }}>{track.name}</Text>
     <Text>{R.pluck('name', track.artists).join(', ')}</Text>
   </View>
 );
 
-const ListTracks = ({ seeds, playlistType, minTempo, goToFirstScreen }) => {
-  const [playlist, setPlaylist] = useState<SpotifyApi.PlaylistObjectFull>(
-    undefined,
-  );
+interface ListTracksProps {
+  seeds: Seed[];
+  playlistType: PlaylistType;
+  minTempo: number;
+  goToFirstScreen: () => void;
+}
+const ListTracks: FunctionComponent<ListTracksProps> = ({
+  seeds,
+  playlistType,
+  minTempo,
+  goToFirstScreen,
+}) => {
+  const [playlist, setPlaylist] = useState<
+    SpotifyApi.PlaylistObjectFull | undefined
+  >(undefined);
   const [tracksLoading, setTracksLoading] = useState(true);
   const [tracks, setTracks] = useState<
-    FullTrackObjectWithAudioFeatures[] | SpotifyApi.TrackObjectSimplified[]
+    (FullTrackObjectWithAudioFeatures | SpotifyApi.TrackObjectSimplified)[]
   >([]);
 
   useEffect(() => {
     const getTracks =
       playlistType === 'DISCOVER'
-        ? getMyRecommendedTracksWithAudioFeatures({ seeds, minTempo })
+        ? getMyRecommendedTracksWithAudioFeatures(seeds, minTempo)
         : getMySavedTracksWithAudioFeatures(minTempo);
     getTracks.then((tracks) => {
       setTracks(tracks);
@@ -286,8 +172,8 @@ const ListTracks = ({ seeds, playlistType, minTempo, goToFirstScreen }) => {
     });
   }, []);
 
-  const handleCreatePlaylist = (tracks) => {
-    createPlaylist(tracks).then((playlist) => {
+  const handleCreatePlaylist = () => {
+    createPlaylist(R.pluck('uri', tracks)).then((playlist) => {
       setPlaylist(playlist);
     });
   };
@@ -304,6 +190,7 @@ const ListTracks = ({ seeds, playlistType, minTempo, goToFirstScreen }) => {
         <View style={{ paddingBottom: 128 }} />
       </ScrollView>
       <View
+        // @ts-ignore - complains about position: 'fixed'
         style={{
           position: Platform.OS === 'web' ? 'fixed' : 'absolute',
           maxWidth: 700,
@@ -316,7 +203,6 @@ const ListTracks = ({ seeds, playlistType, minTempo, goToFirstScreen }) => {
       >
         {playlist ? (
           <Button
-            title="Listen to playlist"
             onPress={() => Linking.openURL(playlist.external_urls.spotify)}
           >
             Listen to playlist
@@ -324,8 +210,7 @@ const ListTracks = ({ seeds, playlistType, minTempo, goToFirstScreen }) => {
         ) : (
           <Button
             disabled={tracksLoading || tracks.length < 1}
-            title="Create Playlist"
-            onPress={() => handleCreatePlaylist(tracks)}
+            onPress={() => handleCreatePlaylist()}
           >
             Create playlist
           </Button>
@@ -354,81 +239,19 @@ const TitleSection = () => (
   </View>
 );
 
-const useDarkMode = () => {
-  const colorScheme = useColorScheme();
-  return colorScheme === 'dark';
-};
-
-const Text = ({ style, color, ...props }) => {
-  const darkMode = useDarkMode();
-
-  const lightModeColor = color?.lightMode ?? colors.dark;
-  const darkModeColor = color?.darkMode ?? colors.light;
-  return (
-    <PrimitiveText
-      style={[
-        { color: darkMode ? darkModeColor : lightModeColor },
-        ...(Array.isArray(style) ? style : [style]),
-      ]}
-      {...props}
-    />
-  );
-};
-
-const ButtonText = ({ style, children }) => {
-  const darkMode = useDarkMode();
-  return (
-    <Text
-      style={[
-        buttonStyles.buttonText,
-        ...(Array.isArray(style) ? style : [style]),
-        { color: darkMode ? colors.dark : colors.light },
-      ]}
-    >
-      {children}
-    </Text>
-  );
-};
-
-const Button = ({ disabled, onPress, style, children, ...props }) => {
-  const darkMode = useDarkMode();
-  return (
-    <TouchableOpacity
-      {...props}
-      style={[
-        buttonStyles.button,
-        {
-          backgroundColor: darkMode ? colors.light : colors.dark,
-          opacity: disabled ? 0.7 : 1,
-        },
-        style,
-      ]}
-      onPress={disabled ? null : onPress}
-    >
-      <ButtonText>{children}</ButtonText>
-    </TouchableOpacity>
-  );
-};
-
-const buttonStyles = StyleSheet.create({
-  button: {
-    backgroundColor: colors.dark,
-    borderRadius: 0,
-    padding: 12,
-    alignItems: 'center',
-  },
-  buttonText: {
-    textTransform: 'uppercase',
-    fontFamily: 'Syncopate',
-  },
-});
-
-const InitialScreen = ({ isLoggedIn, onButtonClick }) => (
+interface InitialScreenProps {
+  isLoggedIn: boolean;
+  onButtonClick: () => void;
+}
+const InitialScreen: FunctionComponent<InitialScreenProps> = ({
+  isLoggedIn,
+  onButtonClick,
+}) => (
   <View style={styles.content}>
     <Text style={{ fontSize: 18, marginBottom: 100, fontWeight: '500' }}>
       Create personalised playlists tailored to your pace and taste
     </Text>
-    <Button style={{ marginTop: 'auto' }} title="login" onPress={onButtonClick}>
+    <Button style={{ marginTop: 'auto' }} onPress={onButtonClick}>
       Let's Go >>>
     </Button>
     {!isLoggedIn && (
@@ -461,7 +284,7 @@ const PACE_OPTIONS = [
   },
 ];
 
-const BigButton = ({ children, onPress }) => {
+const BigButton: FunctionComponent<ButtonProps> = ({ children, onPress }) => {
   const darkMode = useDarkMode();
   return (
     <View
@@ -488,7 +311,12 @@ const BigButton = ({ children, onPress }) => {
   );
 };
 
-const PaceScreen = ({ handleChooseTempo }) => (
+interface PaceScreenProps {
+  handleChooseTempo: (tempo: number) => void;
+}
+const PaceScreen: FunctionComponent<PaceScreenProps> = ({
+  handleChooseTempo,
+}) => (
   <View style={styles.content}>
     <Text style={typographyStyles.heading}>What's your pace?</Text>
     <Text style={{ marginTop: 8 }}>Choose your average time per km</Text>
@@ -515,7 +343,12 @@ const PaceScreen = ({ handleChooseTempo }) => (
   </View>
 );
 
-const PlaylistTypeScreen = ({ handleChoosePlaylistType }) => (
+interface PlaylistTypeScreenProps {
+  handleChoosePlaylistType: (playlistType: PlaylistType) => void;
+}
+const PlaylistTypeScreen: FunctionComponent<PlaylistTypeScreenProps> = ({
+  handleChoosePlaylistType,
+}) => (
   <View style={styles.content}>
     <Text style={typographyStyles.heading}>Playlist Type</Text>
     <Text style={{ marginBottom: 16 }}>Choose one of the options below</Text>
@@ -556,7 +389,16 @@ const PlaylistTypeScreen = ({ handleChoosePlaylistType }) => (
   </View>
 );
 
-const Seed = ({ disabled, isSelected, children, onPress }) => {
+interface SeedProps extends TouchableOpacityProps {
+  disabled: boolean;
+  isSelected: boolean;
+}
+const Seed: FunctionComponent<SeedProps> = ({
+  disabled,
+  isSelected,
+  children,
+  onPress,
+}) => {
   const darkMode = useDarkMode();
 
   const color = darkMode ? colors.light : colors.dark;
@@ -583,7 +425,13 @@ const Seed = ({ disabled, isSelected, children, onPress }) => {
 };
 const SEEDS_TO_SHOW = 15;
 
-const DiscoverOptionsScreen = ({
+interface DiscoverOptionsScreenProps {
+  seeds: Seed[];
+  addSeed: (seed: Seed) => void;
+  removeSeed: (seedId: string) => void;
+  confirmSeeds: () => void;
+}
+const DiscoverOptionsScreen: FunctionComponent<DiscoverOptionsScreenProps> = ({
   seeds = [],
   addSeed,
   removeSeed,
@@ -605,7 +453,9 @@ const DiscoverOptionsScreen = ({
   const firstIndex = (page % numPages) * SEEDS_TO_SHOW;
   const lastIndex = firstIndex + SEEDS_TO_SHOW;
 
-  const artistsToShow = artists.slice(firstIndex, lastIndex);
+  const artistsToShow: Seed[] = artists
+    .slice(firstIndex, lastIndex)
+    .map(({ id, name }) => ({ id, name, type: 'ARTIST' }));
 
   return (
     <View style={styles.content}>
@@ -615,26 +465,28 @@ const DiscoverOptionsScreen = ({
       </Text>
       <View style={{ marginTop: 16, flexDirection: 'row', flexWrap: 'wrap' }}>
         {R.unionWith(R.eqBy(R.prop('id')), seeds, artistsToShow).map(
-          (artist) => {
-            const isSelected = seeds.find(({ name }) => name === artist.name);
+          (seed: Seed) => {
+            const isSelected = Boolean(
+              seeds.find(({ name }) => name === seed.name),
+            );
             return (
               <Seed
-                key={artist.id}
+                key={seed.id}
                 isSelected={isSelected}
                 disabled={!isSelected && maxSelected}
                 onPress={() =>
                   isSelected
-                    ? removeSeed(artist.id)
+                    ? removeSeed(seed.id)
                     : maxSelected
-                    ? null
+                    ? undefined
                     : addSeed({
-                        id: artist.id,
-                        name: artist.name,
+                        id: seed.id,
+                        name: seed.name,
                         type: 'ARTIST',
                       })
                 }
               >
-                {artist.name}
+                {seed.name}
               </Seed>
             );
           },
@@ -648,7 +500,6 @@ const DiscoverOptionsScreen = ({
       </Text>
       <Button
         style={{ marginTop: 'auto' }}
-        title="confirm"
         onPress={confirmSeeds}
         disabled={!confirmButtonValid}
       >
@@ -660,15 +511,18 @@ const DiscoverOptionsScreen = ({
 
 interface Seed {
   id: string;
-  value: string;
+  name: string;
   type: 'ARTIST' | 'GENRE';
 }
 
 const AnimateComponent = Platform.OS === 'web' ? 'div' : View;
 
+interface ProgressProps {
+  progress: string;
+}
 const Progress = posed(AnimateComponent)({
   progress: {
-    width: ({ progress }) => `${progress}`,
+    width: ({ progress }: ProgressProps) => `${progress}`,
   },
 });
 
@@ -689,11 +543,17 @@ const ScreenTransition = posed(AnimateComponent)({
   },
 });
 
+interface Screen {
+  name: string;
+  include: boolean;
+  component: ReactElement;
+}
+
 const App = () => {
   const [fontsLoaded, setFontsLoaded] = useState(false);
   const { token, expires, handleLogin } = useSpotifyAuthentication();
 
-  const [playlistType, setPlaylistType] = useState('');
+  const [playlistType, setPlaylistType] = useState<PlaylistType>('MY_TRACKS');
   const [minTempo, setMinTempo] = useState(0);
 
   const [seeds, setSeeds] = useState<Seed[]>([]);
@@ -720,12 +580,12 @@ const App = () => {
     setSeeds(R.reject(R.propEq('id', id)));
   };
 
-  const handleChoosePlaylistType = (playlistType) => {
+  const handleChoosePlaylistType = (playlistType: PlaylistType) => {
     setPlaylistType(playlistType);
     goToNextScreen();
   };
 
-  const handleChooseTempo = (tempo) => {
+  const handleChooseTempo = (tempo: number) => {
     setMinTempo(tempo);
     goToNextScreen();
   };
@@ -740,7 +600,7 @@ const App = () => {
     return null;
   }
 
-  const screens = R.filter(R.prop('include'))([
+  const screens: Screen[] = [
     {
       name: 'initial',
       include: true,
@@ -749,7 +609,7 @@ const App = () => {
           isLoggedIn={Boolean(token)}
           onButtonClick={() => {
             const currentTime = new Date().getTime();
-            if (token && expires > currentTime) {
+            if (token && expires && expires > currentTime) {
               goToNextScreen();
               return;
             }
@@ -796,7 +656,7 @@ const App = () => {
         />
       ),
     },
-  ]);
+  ].filter(({ include }) => include);
 
   const currentScreen = screens[screenIndex];
 
