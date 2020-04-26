@@ -9,13 +9,11 @@
     "build:web": "expo build:web"
   },
   "dependencies": {
-    "@types/ramda": "^0.27.3",
     "@types/spotify-api": "^0.0.3",
     "@types/spotify-web-api-node": "^4.0.1",
     "expo": "~37.0.3",
     "expo-auth-session": "^1.1.0",
     "expo-web-browser": "^8.2.0",
-    "ramda": "^0.27.0",
     "react": "~16.9.0",
     "react-dom": "~16.9.0",
     "react-native": "https://github.com/expo/react-native/archive/sdk-37.0.1.tar.gz",
@@ -24,6 +22,7 @@
     "react-native-screens": "~2.2.0",
     "react-native-web": "~0.11.7",
     "react-pose": "^4.0.10",
+    "remeda": "^0.0.19",
     "spotify-web-api-node": "^4.0.0"
   },
   "devDependencies": {
