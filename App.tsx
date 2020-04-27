@@ -21,6 +21,7 @@ import { AppearanceProvider, useColorScheme } from 'react-native-appearance';
 import * as WebBrowser from 'expo-web-browser';
 import * as Font from 'expo-font';
 import * as R from 'remeda';
+import { Helmet } from 'react-helmet';
 
 import posed, { Transition } from './pose';
 import {
@@ -47,6 +48,13 @@ const useDarkMode = () => {
   const colorScheme = useColorScheme();
   return colorScheme === 'dark';
 };
+
+const WebMeta = () => (
+  <Helmet>
+    <meta name="apple-itunes-app" content="app-id=1509999732" />
+    <meta name="twitter:card" content="summary" />
+  </Helmet>
+);
 
 type PlaylistType = 'DISCOVER' | 'MY_TRACKS';
 
@@ -184,6 +192,12 @@ const ListTracks: FunctionComponent<ListTracksProps> = ({
         <Text style={[typographyStyles.heading, { marginBottom: 16 }]}>
           {tracksLoading ? 'Loading Tracks...' : 'Your Playlist'}
         </Text>
+        {!tracksLoading && tracks.length === 0 && (
+          <Text>
+            Sorry. No tracks could be found. Please try starting again with
+            different options.
+          </Text>
+        )}
         {tracks.map((track) => (
           <Track key={track.id} track={track} />
         ))}
@@ -430,19 +444,23 @@ interface DiscoverOptionsScreenProps {
   addSeed: (seed: Seed) => void;
   removeSeed: (seedId: string) => void;
   confirmSeeds: () => void;
+  goToPreviousScreen: () => void;
 }
 const DiscoverOptionsScreen: FunctionComponent<DiscoverOptionsScreenProps> = ({
   seeds = [],
   addSeed,
   removeSeed,
   confirmSeeds,
+  goToPreviousScreen,
 }) => {
   const [artists, setArtists] = useState<SpotifyApi.ArtistObjectFull[]>([]);
+  const [artistsLoading, setArtistsLoading] = useState(true);
   const [page, setPage] = useState(0);
 
   useEffect(() => {
     spotifyApi.getMyTopArtists({ limit: 50 }).then(({ body: { items } }) => {
       setArtists(items);
+      setArtistsLoading(false);
     });
   }, []);
 
@@ -463,9 +481,18 @@ const DiscoverOptionsScreen: FunctionComponent<DiscoverOptionsScreenProps> = ({
     <View style={styles.content}>
       <Text style={typographyStyles.heading}>Discover</Text>
       <Text style={{ marginTop: 8 }}>
-        What do you like to run to? Choose up to 5 artists or genres.
+        What do you like to run to? Choose up to 5 artists.
       </Text>
       <View style={{ marginTop: 16, flexDirection: 'row', flexWrap: 'wrap' }}>
+        {artists.length === 0 && !artistsLoading && (
+          <Text
+            onPress={goToPreviousScreen}
+            style={{ textDecorationLine: 'underline' }}
+          >
+            Couldn't fetch your top artists. Go back and try the 'My Tracks'
+            option.
+          </Text>
+        )}
         {[...seeds, ...artistsToShow].map((seed: Seed) => {
           const isSelected = Boolean(
             seeds.find(({ name }) => name === seed.name),
@@ -492,12 +519,14 @@ const DiscoverOptionsScreen: FunctionComponent<DiscoverOptionsScreenProps> = ({
           );
         })}
       </View>
-      <Text
-        style={{ textDecorationLine: 'underline' }}
-        onPress={() => setPage(page + 1)}
-      >
-        Refresh
-      </Text>
+      {!artistsLoading && artists.length > SEEDS_TO_SHOW && (
+        <Text
+          style={{ textDecorationLine: 'underline' }}
+          onPress={() => setPage(page + 1)}
+        >
+          Refresh
+        </Text>
+      )}
       <Button
         style={{ marginTop: 'auto' }}
         onPress={confirmSeeds}
@@ -571,6 +600,9 @@ const App = () => {
   const goToNextScreen = () => {
     setScreenIndex(screenIndex + 1);
   };
+  const goToPreviousScreen = () => {
+    setScreenIndex(screenIndex - 1);
+  };
 
   const addSeed = (seed: Seed) => {
     setSeeds([...seeds, seed]);
@@ -641,6 +673,7 @@ const App = () => {
           addSeed={addSeed}
           removeSeed={removeSeed}
           confirmSeeds={goToNextScreen}
+          goToPreviousScreen={goToPreviousScreen}
         />
       ),
     },
@@ -671,6 +704,29 @@ const App = () => {
         backgroundColor: darkMode ? colors.dark : colors.light,
       }}
     >
+      {Platform.OS === 'web' && (
+        <View
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            padding: 16,
+            width: '100%',
+            minWidth: 700,
+            zIndex: -1,
+            alignItems: 'flex-end',
+          }}
+        >
+          <Text
+            onPress={() =>
+              Linking.openURL('https://github.com/lrholmes/tempo-run')
+            }
+            style={{ textDecorationLine: 'underline' }}
+          >
+            GitHub
+          </Text>
+        </View>
+      )}
       <StatusBar barStyle={themeStatusBarStyle} />
       <SafeAreaView style={[styles.container]}>
         <View style={styles.titleContainer}>
@@ -715,6 +771,7 @@ const App = () => {
 
 export default () => (
   <AppearanceProvider>
+    <WebMeta />
     <App />
   </AppearanceProvider>
 );
