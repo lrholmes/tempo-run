@@ -773,7 +773,7 @@ const App = () => {
 
 export default () => (
   <AppearanceProvider>
-    <WebMeta />
+    {Platform.OS === 'web' && <WebMeta />}
     <App />
   </AppearanceProvider>
 );
