@@ -3,7 +3,8 @@ import { View, TouchableOpacity, TouchableOpacityProps } from 'react-native';
 
 import { colors } from '../colors';
 import { spotifyApi } from '../spotify';
-import { useDarkMode, Seed } from '../App';
+import { useDarkMode } from '../useDarkMode';
+import { Seed } from '../App';
 import { Button } from '../components/Button';
 import { Text } from '../components/Text';
 import { ContentContainer } from '../components/ContentContainer';

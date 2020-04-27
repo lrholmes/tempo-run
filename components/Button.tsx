@@ -7,7 +7,7 @@ import {
 } from 'react-native';
 
 import { colors } from '../colors';
-import { useDarkMode } from '../App';
+import { useDarkMode } from '../useDarkMode';
 import { Text, TextProps } from './Text';
 
 export const ButtonText: FunctionComponent<TextProps> = ({

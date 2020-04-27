@@ -7,7 +7,7 @@ import {
   SafeAreaView,
   StatusBar,
 } from 'react-native';
-import { AppearanceProvider, useColorScheme } from 'react-native-appearance';
+import { AppearanceProvider } from 'react-native-appearance';
 import * as WebBrowser from 'expo-web-browser';
 import * as Font from 'expo-font';
 import * as R from 'remeda';
@@ -16,6 +16,7 @@ import { Helmet } from 'react-helmet';
 import posed, { Transition } from './pose';
 import { colors } from './colors';
 import { useSpotifyAuthentication } from './useSpotifyAuthentication';
+import { useDarkMode } from './useDarkMode';
 import { Text } from './components/Text';
 import { InitialScreen } from './screens/InitialScreen';
 import { PaceScreen } from './screens/PaceScreen';
@@ -26,11 +27,6 @@ import { CreatePlaylistScreen } from './screens/CreatePlaylistScreen';
 if (Platform.OS === 'web') {
   WebBrowser.maybeCompleteAuthSession();
 }
-
-export const useDarkMode = () => {
-  const colorScheme = useColorScheme();
-  return colorScheme === 'dark';
-};
 
 const WebMeta = () => (
   <Helmet>

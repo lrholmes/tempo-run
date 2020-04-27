@@ -5,7 +5,7 @@ import {
   StyleSheet,
 } from 'react-native';
 
-import { useDarkMode } from '../App';
+import { useDarkMode } from '../useDarkMode';
 import { colors } from '../colors';
 
 export interface TextProps extends PrimitiveTextProps {
