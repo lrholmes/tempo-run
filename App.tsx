@@ -645,7 +645,9 @@ const App = () => {
               goToNextScreen();
               return;
             }
-            handleLogin().then(goToNextScreen);
+            handleLogin().then(({ type }) =>
+              type === 'success' ? goToNextScreen() : null,
+            );
           }}
         />
       ),
