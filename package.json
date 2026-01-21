@@ -12,7 +12,7 @@
     "@types/react-helmet": "^5.0.15",
     "@types/spotify-api": "^0.0.3",
     "@types/spotify-web-api-node": "^4.0.1",
-    "expo": "~37.0.3",
+    "expo": "~48.0.0",
     "expo-auth-session": "^1.1.0",
     "expo-web-browser": "^8.2.0",
     "react": "~16.9.0",
